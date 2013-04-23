@@ -112,14 +112,25 @@ newapple state@(GameState r a s l d)
     | not (contained na) = newapple $ GameState rr a s l d
     | otherwise        = GameState rr na s l d
     where
-        na = ((r!!0)`mod`80, (r!!1)`mod`60)
+        na = ((r!!0)`mod`gridx, (r!!1)`mod`gridy)
         rr = (drop 2 r)
--- Magic numbers, ew
+
+gridx = 80
+gridy = 60
 contained :: Coord -> Bool
 contained (x,y)
-    | x < 0 || x >= 80 = False
-    | y < 0 || y >= 60 = False
+    | x < 0 || x >= gridx = False
+    | y < 0 || y >= gridy = False
     | otherwise = True
+wrap :: Coord -> Coord
+wrap (x,y) = (wx,wy)
+    where wx | x<0       = x `mod` (-gridx)
+             | x>=gridx   = x `mod` gridx
+             | otherwise = x
+          wy | y<0       = y `mod` (-gridy)
+             | y>=gridy   = y `mod` gridy
+             | otherwise = y
+
 gamedraw :: GameData -> GameState -> IO ()
 gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ dir) = do
     let fmt = SDL.surfaceGetPixelFormat screen
@@ -156,7 +167,8 @@ handle_event events state = foldl handle (state, False) . reverse $ events
             | key == SDL.SDLK_SPACE = initstate r
         tick state@(GameState r a s l d) = check . tick' $ state
         tick state@(DeadState _ _ _) = state
-        tick' state@(GameState r a s l d) = state -- TODO
+        tick' state@(GameState r a s l d) = GameState r a ns l d
+            where ns = take l . (:s) . wrap . dirstep d . head $ s
         check state@(GameState r a s l d)
             | elem (head s) . tail $ s = DeadState r a s
             | head s == a = newapple state

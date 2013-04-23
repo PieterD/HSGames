@@ -2,7 +2,8 @@ module HSGames.Snake.Direction (
     Direction(..),
     dirchange,
     isdirkey,
-    dirfromkey
+    dirfromkey,
+    dirstep
 ) where
 
 import qualified Graphics.UI.SDL as SDL
@@ -27,3 +28,8 @@ dirfromkey SDL.SDLK_UP = NORTH
 dirfromkey SDL.SDLK_RIGHT = EAST
 dirfromkey SDL.SDLK_DOWN = SOUTH
 dirfromkey SDL.SDLK_LEFT = WEST
+
+dirstep NORTH (x,y) = (x,y-1)
+dirstep EAST  (x,y) = (x+1,y)
+dirstep SOUTH (x,y) = (x,y+1)
+dirstep WEST  (x,y) = (x-1,y)
