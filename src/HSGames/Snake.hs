@@ -136,8 +136,17 @@ gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ dir) = do
     let fmt = SDL.surfaceGetPixelFormat screen
     black <- SDL.mapRGB fmt 0 0 0
     SDL.fillRect screen Nothing black
+    blue <- SDL.mapRGB fmt 128 128 255
+    green <- SDL.mapRGB fmt 0 255 0
+    white <- SDL.mapRGB fmt 255 255 255
+    sequence . map (put white) . tail $ snake
+    put green apple
+    put blue . head $ snake
     SDL.flip screen
     return ()
+    where
+        put color (x,y) = SDL.fillRect screen (Just $ SDL.Rect (x*10) (y*10) 10 10) color
+
 gamedraw (GameData font screen _ _ _) (DeadState _ apple snake) = do
     print "DED"
     let fmt = SDL.surfaceGetPixelFormat screen
