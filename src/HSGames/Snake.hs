@@ -26,7 +26,6 @@ main = do
 
     fix $ \loop -> do
         e <- SDL.waitEvent
-        print e
         case e of
             SDL.Quit -> do
                 return ()
@@ -42,7 +41,6 @@ main = do
     SDL.quit
 tickerthread (micros,index) = forever $ do
     SDL.pushEvent $ SDL.User SDL.UID0 index nullPtr nullPtr
-    print "tick"
     threadDelay micros
 
 
@@ -99,14 +97,13 @@ gamethread gd = forever $ do
     --modifyIORef stateref $ gametick events
     state <- readIORef stateref
     let (mstate, newdraw) = handle_event events state
-    print events
     writeIORef stateref mstate
     when newdraw $ do
         atomically $ writeTVar drawchan $ gamedraw gd state
         SDL.pushEvent $ SDL.User SDL.UID1 0 nullPtr nullPtr
     return ()
 initstate :: Randoms -> GameState
-initstate r = newapple $ GameState r (0,0) [(40,30)] 1 EAST []
+initstate r = newapple $ GameState r (0,0) [(40,30)] 2 EAST []
 newapple state@(GameState r a s l d d2)
     | elem na s        = newapple $ GameState rr a s l d d2
     | not (contained na) = newapple $ GameState rr a s l d d2
@@ -123,13 +120,7 @@ contained (x,y)
     | y < 0 || y >= gridy = False
     | otherwise = True
 wrap :: Coord -> Coord
-wrap (x,y) = (wx,wy)
-    where wx | x<0       = x `mod` (-gridx)
-             | x>=gridx   = x `mod` gridx
-             | otherwise = x
-          wy | y<0       = y `mod` (-gridy)
-             | y>=gridy   = y `mod` gridy
-             | otherwise = y
+wrap (x,y) = (x`mod`gridx,y`mod`gridy)
 
 gamedraw :: GameData -> GameState -> IO ()
 gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ _ _) = do
@@ -186,7 +177,7 @@ handle_event events state = foldl handle (state, False) . reverse $ events
             | otherwise = GameState r a s l d2 dr
         check state@(GameState r a s l d d2)
             | elem (head s) . tail $ s = DeadState r a s
-            | head s == a = newapple $ GameState r a s (l+1) d d2
+            | head s == a = newapple $ GameState r a s (l+2) d d2
             | otherwise = state
 
 

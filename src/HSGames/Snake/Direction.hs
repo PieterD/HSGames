@@ -1,5 +1,6 @@
 module HSGames.Snake.Direction (
     Direction(..),
+    negdir,
     dirchange,
     isdirkey,
     dirfromkey,
