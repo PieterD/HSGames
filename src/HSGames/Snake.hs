@@ -2,8 +2,8 @@ module HSGames.Snake (
     main
 ) where
 
---import System.Random(getStdGen,randoms)
-import System.Random(randomIO)
+import System.Random(getStdGen,randoms)
+--import System.Random(randomIO)
 import Data.Function(fix)
 import Control.Monad(forever, when, mapM)
 import Control.Concurrent(forkIO, threadDelay, killThread)
@@ -60,7 +60,9 @@ gameinit = do
     SDL.enableKeyRepeat 0 0
     font <- TTF.openFont "/home/pieter/lacuna.ttf" 32
     -- Initial game state
-    gsref <- newIORef $ initstate
+    rndgen <- getStdGen
+    let rnd = randoms rndgen
+    gsref <- newIORef $ initstate rnd
     eventchan <- newTVarIO []
     drawchan <- newTVarIO (print "hello")
     let gd = GameData font screen gsref eventchan drawchan
@@ -83,8 +85,9 @@ type Coord = (Int,Int)
 type ApplePos = Coord
 type Snake = [Coord]
 type Length = Int
-data GameState = GameState ApplePos Snake Length Direction
-               | DeadState ApplePos Snake
+type Randoms = [Int]
+data GameState = GameState Randoms ApplePos Snake Length Direction
+               | DeadState Randoms ApplePos Snake
 gamethread gd = forever $ do
     let eventchan = gdeventchan gd
     let drawchan = gddrawchan gd
@@ -102,16 +105,29 @@ gamethread gd = forever $ do
         atomically $ writeTVar drawchan $ gamedraw gd state
         SDL.pushEvent $ SDL.User SDL.UID1 0 nullPtr nullPtr
     return ()
-initstate :: GameState
-initstate = GameState (40,30) [(40,30)] 1 EAST
+initstate :: Randoms -> GameState
+initstate r = newapple $ GameState r (0,0) [(40,30)] 1 EAST
+newapple state@(GameState r a s l d)
+    | elem na s        = newapple $ GameState rr a s l d
+    | not (contained na) = newapple $ GameState rr a s l d
+    | otherwise        = GameState rr na s l d
+    where
+        na = ((r!!0)`mod`80, (r!!1)`mod`60)
+        rr = (drop 2 r)
+-- Magic numbers, ew
+contained :: Coord -> Bool
+contained (x,y)
+    | x < 0 || x >= 80 = False
+    | y < 0 || y >= 60 = False
+    | otherwise = True
 gamedraw :: GameData -> GameState -> IO ()
-gamedraw (GameData font screen _ _ _) (GameState apple snake len dir) = do
+gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ dir) = do
     let fmt = SDL.surfaceGetPixelFormat screen
     black <- SDL.mapRGB fmt 0 0 0
     SDL.fillRect screen Nothing black
     SDL.flip screen
     return ()
-gamedraw (GameData font screen _ _ _) (DeadState apple snake) = do
+gamedraw (GameData font screen _ _ _) (DeadState _ apple snake) = do
     print "DED"
     let fmt = SDL.surfaceGetPixelFormat screen
     black <- SDL.mapRGB fmt 0 0 0
@@ -133,16 +149,17 @@ handle_event events state = foldl handle (state, False) . reverse $ events
         handle (s, d) (SDL.User SDL.UID0 1 _ _) = (tick s, d)
         handle (s, d) (SDL.KeyDown (SDL.Keysym k _ _)) = (keydown k s, d)
         handle sd _ = sd
-        keydown key state@(GameState a s l d)
-            | isdirkey key = GameState a s l . dirchange d . dirfromkey $ key
+        keydown key state@(GameState r a s l d)
+            | isdirkey key = GameState r a s l . dirchange d . dirfromkey $ key
             | otherwise = state
-        keydown key state@(DeadState _ _)
-            | key == SDL.SDLK_SPACE = initstate
-        tick state@(GameState a s l d) = check . tick' $ state
-        tick state@(DeadState _ _) = state
-        tick' state@(GameState a s l d) = state -- TODO
-        check state@(GameState a s l d)
-            | elem (head s) . tail $ s = DeadState a s
+        keydown key state@(DeadState r _ _)
+            | key == SDL.SDLK_SPACE = initstate r
+        tick state@(GameState r a s l d) = check . tick' $ state
+        tick state@(DeadState _ _ _) = state
+        tick' state@(GameState r a s l d) = state -- TODO
+        check state@(GameState r a s l d)
+            | elem (head s) . tail $ s = DeadState r a s
+            | head s == a = newapple state
             | otherwise = state
 
 
