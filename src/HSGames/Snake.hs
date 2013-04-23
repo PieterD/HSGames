@@ -3,46 +3,30 @@ module HSGames.Snake (
 ) where
 
 import System.Random(getStdGen,randoms)
---import System.Random(randomIO)
-import Data.Function(fix)
-import Control.Monad(forever, when, mapM)
-import Control.Concurrent(forkIO, threadDelay, killThread)
+import Control.Monad(when)
 import Data.IORef(IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Control.Concurrent.STM(readTVar, writeTVar, newTVarIO, readTVarIO, atomically, retry, STM)
+import Control.Concurrent.STM(newTVarIO)
 import Control.Concurrent.STM.TVar(TVar)
 import GHC.Ptr(nullPtr)
 import qualified Graphics.UI.SDL as SDL
 import qualified Graphics.UI.SDL.TTF as TTF
 
 import HSGames.Snake.Direction
+import HSGames.HSGame
+
+instance HSGame GameData where
+    hsgDrawSTM = gddrawchan
+    hsgEventSTM = gdeventchan
+    hsgHandle gd events = do
+        let stateref = gdstateref gd
+        modifyIORef stateref $ handle_event events
+        when (elem (SDL.User SDL.UID0 0 nullPtr nullPtr) events) $ do
+            let drawchan = hsgDrawSTM gd
+            state <- readIORef stateref
+            hsgDraw gd $ gamedraw gd state
 
 main = do
-    SDL.init [SDL.InitEverything]
-    TTF.init
-
-    (gd, tickers) <- gameinit
-    tickerThreadIDs <- mapM (forkIO . tickerthread) tickers
-    gameThreadID <- forkIO $ gamethread gd
-
-    fix $ \loop -> do
-        e <- SDL.waitEvent
-        case e of
-            SDL.Quit -> do
-                return ()
-            SDL.User SDL.UID1 0 _ _ -> do
-                draw <- readTVarIO $ gddrawchan gd
-                draw
-                loop
-            _ -> do
-                atomically $ sendevent gd e
-                loop
-    mapM killThread tickerThreadIDs
-    --TTF.quit
-    SDL.quit
-tickerthread (micros,index) = forever $ do
-    SDL.pushEvent $ SDL.User SDL.UID0 index nullPtr nullPtr
-    threadDelay micros
-
+    hsgRun gameinit
 
 -- Set static game data, mutable refs, and initial game state
 data GameData = GameData {
@@ -52,6 +36,7 @@ data GameData = GameData {
     gdeventchan :: TVar [SDL.Event],
     gddrawchan :: TVar (IO ())
 }
+gameinit :: IO(GameData,[(Int,Int)])
 gameinit = do
     screen <- SDL.setVideoMode 800 600 32 []
     SDL.setCaption "Snaaake!" "Snaaake!"
@@ -66,17 +51,6 @@ gameinit = do
     let gd = GameData font screen gsref eventchan drawchan
     let tickers = [(16666,0),(100000,1)]
     return (gd,tickers)
-sendevent :: GameData -> SDL.Event -> STM ()
-sendevent gd e = do
-    l <- readTVar (gdeventchan gd)
-    writeTVar (gdeventchan gd) (e:l)
-    return ()
-getevents :: GameData -> STM [SDL.Event]
-getevents gd = do
-    l <- readTVar (gdeventchan gd)
-    writeTVar (gdeventchan gd) []
-    return l
-
 
 -- All events are handled in a seperate thread here
 type Coord = (Int,Int)
@@ -86,22 +60,6 @@ type Length = Int
 type Randoms = [Int]
 data GameState = GameState Randoms ApplePos Snake Length Direction [Direction]
                | DeadState Randoms ApplePos Snake
-gamethread gd = forever $ do
-    let eventchan = gdeventchan gd
-    let drawchan = gddrawchan gd
-    let stateref = gdstateref gd
-    events <- atomically $ do
-        events <- getevents gd
-        when (events == []) retry
-        return events
-    --modifyIORef stateref $ gametick events
-    state <- readIORef stateref
-    let (mstate, newdraw) = handle_event events state
-    writeIORef stateref mstate
-    when newdraw $ do
-        atomically $ writeTVar drawchan $ gamedraw gd state
-        SDL.pushEvent $ SDL.User SDL.UID1 0 nullPtr nullPtr
-    return ()
 initstate :: Randoms -> GameState
 initstate r = newapple $ GameState r (0,0) [(40,30)] 2 EAST []
 newapple state@(GameState r a s l d d2)
@@ -139,7 +97,6 @@ gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ _ _) = do
         put color (x,y) = SDL.fillRect screen (Just $ SDL.Rect (x*10) (y*10) 10 10) color
 
 gamedraw (GameData font screen _ _ _) (DeadState _ apple snake) = do
-    print "DED"
     let fmt = SDL.surfaceGetPixelFormat screen
     black <- SDL.mapRGB fmt 0 0 0
     SDL.fillRect screen Nothing black
@@ -153,12 +110,12 @@ gamedraw (GameData font screen _ _ _) (DeadState _ apple snake) = do
     SDL.flip screen
     return ()
 
-handle_event :: [SDL.Event] -> GameState -> (GameState, Bool)
-handle_event events state = foldl handle (state, False) . reverse $ events
+handle_event :: [SDL.Event] -> GameState -> GameState
+handle_event events state = foldl handle state . reverse $ events
     where
-        handle (s, d) (SDL.User SDL.UID0 0 _ _) = (s, True)
-        handle (s, d) (SDL.User SDL.UID0 1 _ _) = (tick s, d)
-        handle (s, d) (SDL.KeyDown (SDL.Keysym k _ _)) = (keydown k s, d)
+        handle s (SDL.User SDL.UID0 0 _ _) = s
+        handle s (SDL.User SDL.UID0 1 _ _) = tick s
+        handle s (SDL.KeyDown (SDL.Keysym k _ _)) = keydown k s
         handle sd _ = sd
         keydown key state@(GameState r a s l d d2)
             | isdirkey key = GameState r a s l d (d2 ++ [dirfromkey key])
