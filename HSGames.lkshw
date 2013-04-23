@@ -1,0 +1,10 @@
+Version of workspace file format:
+               1
+Time of storage:
+               "Sat Apr 13 02:00:04 CEST 2013"
+Name of the workspace:
+               "HSGames"
+File paths of contained packages:
+               ["HSGames.cabal"]
+Maybe file path of an active package:
+               Just "HSGames.cabal"

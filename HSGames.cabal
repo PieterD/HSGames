@@ -1,0 +1,17 @@
+name: HSGames
+version: 0.0.1
+cabal-version: >=1.2
+build-type: Simple
+license: AllRightsReserved
+license-file: ""
+synopsis: Games in Haskell
+data-dir: ""
+ 
+executable HSGames
+    build-depends: QuickCheck -any, SDL -any, SDL-ttf -any, base -any,
+                   random -any, stm -any
+    main-is: Main.hs
+    buildable: True
+    hs-source-dirs: src
+    other-modules: HSGames.Snake.Direction HSGames.Snake
+ 
