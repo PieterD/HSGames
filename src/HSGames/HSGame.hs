@@ -1,17 +1,3 @@
------------------------------------------------------------------------------
---
--- Module      :  HSGames.HSGame
--- Copyright   :
--- License     :  AllRightsReserved
---
--- Maintainer  :
--- Stability   :
--- Portability :
---
--- |
---
------------------------------------------------------------------------------
-
 module HSGames.HSGame (
     HSGame(..),
     hsgRun
