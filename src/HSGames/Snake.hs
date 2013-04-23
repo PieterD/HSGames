@@ -86,7 +86,7 @@ type ApplePos = Coord
 type Snake = [Coord]
 type Length = Int
 type Randoms = [Int]
-data GameState = GameState Randoms ApplePos Snake Length Direction
+data GameState = GameState Randoms ApplePos Snake Length Direction [Direction]
                | DeadState Randoms ApplePos Snake
 gamethread gd = forever $ do
     let eventchan = gdeventchan gd
@@ -106,11 +106,11 @@ gamethread gd = forever $ do
         SDL.pushEvent $ SDL.User SDL.UID1 0 nullPtr nullPtr
     return ()
 initstate :: Randoms -> GameState
-initstate r = newapple $ GameState r (0,0) [(40,30)] 1 EAST
-newapple state@(GameState r a s l d)
-    | elem na s        = newapple $ GameState rr a s l d
-    | not (contained na) = newapple $ GameState rr a s l d
-    | otherwise        = GameState rr na s l d
+initstate r = newapple $ GameState r (0,0) [(40,30)] 1 EAST []
+newapple state@(GameState r a s l d d2)
+    | elem na s        = newapple $ GameState rr a s l d d2
+    | not (contained na) = newapple $ GameState rr a s l d d2
+    | otherwise        = GameState rr na s l d d2
     where
         na = ((r!!0)`mod`gridx, (r!!1)`mod`gridy)
         rr = (drop 2 r)
@@ -132,7 +132,7 @@ wrap (x,y) = (wx,wy)
              | otherwise = y
 
 gamedraw :: GameData -> GameState -> IO ()
-gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ dir) = do
+gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ _ _) = do
     let fmt = SDL.surfaceGetPixelFormat screen
     black <- SDL.mapRGB fmt 0 0 0
     SDL.fillRect screen Nothing black
@@ -169,19 +169,24 @@ handle_event events state = foldl handle (state, False) . reverse $ events
         handle (s, d) (SDL.User SDL.UID0 1 _ _) = (tick s, d)
         handle (s, d) (SDL.KeyDown (SDL.Keysym k _ _)) = (keydown k s, d)
         handle sd _ = sd
-        keydown key state@(GameState r a s l d)
-            | isdirkey key = GameState r a s l . dirchange d . dirfromkey $ key
+        keydown key state@(GameState r a s l d d2)
+            | isdirkey key = GameState r a s l d (d2 ++ [dirfromkey key])
             | otherwise = state
         keydown key state@(DeadState r _ _)
             | key == SDL.SDLK_SPACE = initstate r
             | otherwise = state
-        tick state@(GameState r a s l d) = check . tick' $ state
+        tick state@(GameState _ _ _ _ _ _) = check . dostep . updatedir $ state
         tick state@(DeadState _ _ _) = state
-        tick' state@(GameState r a s l d) = GameState r a ns l d
+        dostep state@(GameState r a s l d d2) = GameState r a ns l d d2
             where ns = take l . (:s) . wrap . dirstep d . head $ s
-        check state@(GameState r a s l d)
+        updatedir state@(GameState r a s l d []) = state
+        updatedir state@(GameState r a s l d (d2:dr))
+            | negdir d == d2 = updatedir $ GameState r a s l d dr
+            | d == d2 = updatedir $ GameState r a s l d dr
+            | otherwise = GameState r a s l d2 dr
+        check state@(GameState r a s l d d2)
             | elem (head s) . tail $ s = DeadState r a s
-            | head s == a = newapple $ GameState r a s (l+1) d
+            | head s == a = newapple $ GameState r a s (l+1) d d2
             | otherwise = state
 
 
