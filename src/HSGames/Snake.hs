@@ -174,13 +174,14 @@ handle_event events state = foldl handle (state, False) . reverse $ events
             | otherwise = state
         keydown key state@(DeadState r _ _)
             | key == SDL.SDLK_SPACE = initstate r
+            | otherwise = state
         tick state@(GameState r a s l d) = check . tick' $ state
         tick state@(DeadState _ _ _) = state
         tick' state@(GameState r a s l d) = GameState r a ns l d
             where ns = take l . (:s) . wrap . dirstep d . head $ s
         check state@(GameState r a s l d)
             | elem (head s) . tail $ s = DeadState r a s
-            | head s == a = newapple state
+            | head s == a = newapple $ GameState r a s (l+1) d
             | otherwise = state
 
 
