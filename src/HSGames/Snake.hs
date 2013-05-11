@@ -16,6 +16,8 @@ import HSGames.Snake.Direction(Direction(..), isdirkey, negdir, dirstep, dirfrom
 import HSGames.Snake.Logic(step, startNew, gridx, gridy, addDirLog)
 import HSGames.Snake.Types(Coord, Apple, Snake, Length, Randoms, DirLog, SnakeData, GameState(..))
 
+import Paths_HSGames
+
 blue = pixel 128 128 255
 green = pixel 0 255 0
 white = pixel 255 255 255
@@ -28,7 +30,8 @@ main = do
     SDL.setCaption "Snaaake!" "Snaaake!"
     -- Turn key repeating off
     SDL.enableKeyRepeat 0 0
-    font <- TTF.openFont "/home/pieter/lacuna.ttf" 32
+    fontpath <- getDataFileName "lacuna.ttf"
+    font <- TTF.openFont fontpath 32
     -- rnd will be an infinite list of random Ints
     rndgen <- getStdGen
     let rnd = randoms rndgen

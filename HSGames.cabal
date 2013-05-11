@@ -5,7 +5,12 @@ build-type: Simple
 license: AllRightsReserved
 license-file: ""
 synopsis: Games in Haskell
-data-dir: ""
+data-dir: "data"
+extra-source-files:
+    README.md
+    Lacuna-Info.doc
+data-files:
+    lacuna.ttf
  
 executable HSGames
     build-depends: QuickCheck -any, SDL -any, SDL-ttf -any, base -any,
