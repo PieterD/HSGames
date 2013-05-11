@@ -1,17 +1,3 @@
------------------------------------------------------------------------------
---
--- Module      :  HSGames.Snake.Types
--- Copyright   :
--- License     :  AllRightsReserved
---
--- Maintainer  :
--- Stability   :
--- Portability :
---
--- |
---
------------------------------------------------------------------------------
-
 module HSGames.Snake.Types (
     Coord,
     Apple,
