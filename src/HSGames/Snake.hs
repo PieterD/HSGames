@@ -128,7 +128,7 @@ handleEvent evt uid state@(PauseState gstate) = do
             return $ Left "Bye!"
         (SDL.KeyDown (SDL.Keysym SDL.SDLK_SPACE _ _)) -> do
             -- Continue playing by returning the saved game state.
-            return . Right $ gstate
+            return $ Right gstate
         (SDL.User SDL.UID0 0 _ _) -> do
             draw
             return $ Right state
@@ -146,7 +146,7 @@ handleEvent evt uid state@(DeadState gstate@(RunState rnd _ _)) = do
             return $ Left "Bye!"
         (SDL.KeyDown (SDL.Keysym SDL.SDLK_SPACE _ _)) -> do
             -- Start a new game, like in InitState.
-            return . Right $ startNew rnd
+            return $ Right $ startNew rnd
         (SDL.User SDL.UID0 0 _ _) -> do
             draw
             return $ Right state

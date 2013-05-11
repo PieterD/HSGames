@@ -28,8 +28,8 @@ initTicker = do
 startTicker :: TickerMaster -> Index -> Micros -> IO ()
 startTicker (TickerMaster ref) index micros = do
     let tp = (index, micros)
-    id <- forkIO $ tickerThread tp
-    atomically . modifyTVar ref . (:) $ (id, tp)
+    tid <- forkIO $ tickerThread tp
+    atomically . modifyTVar ref . (:) $ (tid, tp)
     return ()
 
 endTicker :: TickerMaster -> Index -> IO ()
