@@ -2,139 +2,156 @@ module HSGames.Snake (
     main
 ) where
 
+import Data.Maybe(Maybe)
+import Control.Monad(forever, when)
+import Control.Concurrent(forkIO, threadDelay, killThread)
 import System.Random(getStdGen,randoms)
-import Control.Monad(when)
-import Data.IORef(IORef, newIORef, modifyIORef, readIORef, writeIORef)
-import Control.Concurrent.STM(newTVarIO)
-import Control.Concurrent.STM.TVar(TVar)
 import GHC.Ptr(nullPtr)
 import qualified Graphics.UI.SDL as SDL
 import qualified Graphics.UI.SDL.TTF as TTF
 
-import HSGames.Snake.Direction
-import HSGames.HSGame
+import HSGames.Monad(uiRun, UIData, UIState, pixel, centerMessage, fillScreen, fillRect)
+import HSGames.Ticker(initTicker, startTicker, endAllTickers, TickerMaster)
+import HSGames.Snake.Direction(Direction(..), isdirkey, negdir, dirstep, dirfromkey)
+import HSGames.Snake.Logic(step, startNew, gridx, gridy, addDirLog)
+import HSGames.Snake.Types(Coord, Apple, Snake, Length, Randoms, DirLog, SnakeData, GameState(..))
 
-instance HSGame GameData where
-    hsgDrawSTM = gddrawchan
-    hsgEventSTM = gdeventchan
-    hsgHandle gd events = do
-        let stateref = gdstateref gd
-        modifyIORef stateref $ handle_event events
-        when (elem (SDL.User SDL.UID0 0 nullPtr nullPtr) events) $ do
-            let drawchan = hsgDrawSTM gd
-            state <- readIORef stateref
-            hsgDraw gd $ gamedraw gd state
+blue = pixel 128 128 255
+green = pixel 0 255 0
+white = pixel 255 255 255
+black = pixel 0 0 0
 
 main = do
-    hsgRun gameinit
-
--- Set static game data, mutable refs, and initial game state
-data GameData = GameData {
-    gdfont :: TTF.Font,
-    gdsurface :: SDL.Surface,
-    gdstateref :: IORef GameState,
-    gdeventchan :: TVar [SDL.Event],
-    gddrawchan :: TVar (IO ())
-}
-gameinit :: IO(GameData,[(Int,Int)])
-gameinit = do
-    screen <- SDL.setVideoMode 800 600 32 []
+    SDL.init [SDL.InitEverything]
+    TTF.init
+    screen <- SDL.setVideoMode (gridx*10) (gridy*10) 32 []
     SDL.setCaption "Snaaake!" "Snaaake!"
+    -- Turn key repeating off
     SDL.enableKeyRepeat 0 0
     font <- TTF.openFont "/home/pieter/lacuna.ttf" 32
-    -- Initial game state
+    -- rnd will be an infinite list of random Ints
     rndgen <- getStdGen
     let rnd = randoms rndgen
-    gsref <- newIORef $ initstate rnd
-    eventchan <- newTVarIO []
-    drawchan <- newTVarIO (print "hello")
-    let gd = GameData font screen gsref eventchan drawchan
-    let tickers = [(16666,0),(100000,1)]
-    return (gd,tickers)
+    -- Set up 24 fps main ticker
+    tm <- initTicker
+    startTicker tm 0 (1000000`div`24)
+    -- Main event loop
+    let loop uid state = do
+        evt <- SDL.waitEvent
+        -- handleEvent returns either a string, which means we quit, or a new state.
+        rv <- handleEvent evt uid state
+        case rv of
+            Left err -> do
+                print err
+                return ()
+            Right state' -> do
+                loop uid state'
+    -- Start loop with the initial state.
+     in loop (screen, font, tm) $ InitState rnd
+    endAllTickers tm
+    SDL.quit
 
--- All events are handled in a seperate thread here
-type Coord = (Int,Int)
-type ApplePos = Coord
-type Snake = [Coord]
-type Length = Int
-type Randoms = [Int]
-data GameState = GameState Randoms ApplePos Snake Length Direction [Direction]
-               | DeadState Randoms ApplePos Snake
-initstate :: Randoms -> GameState
-initstate r = newapple $ GameState r (0,0) [(40,30)] 2 EAST []
-newapple state@(GameState r a s l d d2)
-    | elem na s        = newapple $ GameState rr a s l d d2
-    | not (contained na) = newapple $ GameState rr a s l d d2
-    | otherwise        = GameState rr na s l d d2
-    where
-        na = ((r!!0)`mod`gridx, (r!!1)`mod`gridy)
-        rr = (drop 2 r)
-
-gridx = 80
-gridy = 60
-contained :: Coord -> Bool
-contained (x,y)
-    | x < 0 || x >= gridx = False
-    | y < 0 || y >= gridy = False
-    | otherwise = True
-wrap :: Coord -> Coord
-wrap (x,y) = (x`mod`gridx,y`mod`gridy)
-
-gamedraw :: GameData -> GameState -> IO ()
-gamedraw (GameData font screen _ _ _) (GameState _ apple snake _ _ _) = do
-    let fmt = SDL.surfaceGetPixelFormat screen
-    black <- SDL.mapRGB fmt 0 0 0
-    SDL.fillRect screen Nothing black
-    blue <- SDL.mapRGB fmt 128 128 255
-    green <- SDL.mapRGB fmt 0 255 0
-    white <- SDL.mapRGB fmt 255 255 255
+-- Draw the screen for every state. This needs to be called from uiRun.
+drawState :: GameState -> UIState ()
+drawState (InitState _) = do
+    fillScreen black
+    centerMessage "Press space to start"
+drawState (RunState _ (snake, snakelen, dir, dirlog) apple) = do
+    fillScreen black
     sequence . map (put white) . tail $ snake
     put green apple
     put blue . head $ snake
-    SDL.flip screen
-    return ()
-    where
-        put color (x,y) = SDL.fillRect screen (Just $ SDL.Rect (x*10) (y*10) 10 10) color
+    where put color (x,y) = fillRect (SDL.Rect (x*10) (y*10) 10 10) color
+drawState (PauseState gstate) = do
+    drawState gstate
+    centerMessage "Game paused. Press space to continue"
+drawState (DeadState gstate) = do
+    drawState gstate
+    centerMessage "You died! Press space to try again"
 
-gamedraw (GameData font screen _ _ _) (DeadState _ apple snake) = do
-    let fmt = SDL.surfaceGetPixelFormat screen
-    black <- SDL.mapRGB fmt 0 0 0
-    SDL.fillRect screen Nothing black
-    message <- TTF.renderTextSolid font "You're DEAD! Press space." (SDL.Color 255 0 0)
-    let x = (SDL.surfaceGetWidth screen `div` 2) - (SDL.surfaceGetWidth message `div` 2)
-        y = (SDL.surfaceGetHeight screen `div` 2) - (SDL.surfaceGetHeight message `div` 2)
-        w = SDL.surfaceGetWidth message
-        h = SDL.surfaceGetHeight message
-        dst = SDL.Rect x y w h
-    SDL.blitSurface message Nothing screen $ Just $ dst
-    SDL.flip screen
-    return ()
-
-handle_event :: [SDL.Event] -> GameState -> GameState
-handle_event events state = foldl handle state . reverse $ events
+-- Handle events for every state.
+-- These return a new state, or a goodbye message.
+handleEvent :: SDL.Event -> UIData -> GameState -> IO (Either String GameState)
+handleEvent evt uid state@(InitState rnd) = do
+    case evt of
+        SDL.Quit -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_ESCAPE _ _)) -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_SPACE _ _)) -> do
+            -- Start the game.
+            return . Right $ startNew rnd
+        (SDL.User SDL.UID0 0 _ _) -> do
+            -- Frame timer event
+            draw
+            return $ Right state
+        SDL.VideoExpose -> do
+            draw
+            return $ Right state
+        _ -> return $ Right state
     where
-        handle s (SDL.User SDL.UID0 0 _ _) = s
-        handle s (SDL.User SDL.UID0 1 _ _) = tick s
-        handle s (SDL.KeyDown (SDL.Keysym k _ _)) = keydown k s
-        handle sd _ = sd
-        keydown key state@(GameState r a s l d d2)
-            | isdirkey key = GameState r a s l d (d2 ++ [dirfromkey key])
-            | otherwise = state
-        keydown key state@(DeadState r _ _)
-            | key == SDL.SDLK_SPACE = initstate r
-            | otherwise = state
-        tick state@(GameState _ _ _ _ _ _) = check . dostep . updatedir $ state
-        tick state@(DeadState _ _ _) = state
-        dostep state@(GameState r a s l d d2) = GameState r a ns l d d2
-            where ns = take l . (:s) . wrap . dirstep d . head $ s
-        updatedir state@(GameState r a s l d []) = state
-        updatedir state@(GameState r a s l d (d2:dr))
-            | negdir d == d2 = updatedir $ GameState r a s l d dr
-            | d == d2 = updatedir $ GameState r a s l d dr
-            | otherwise = GameState r a s l d2 dr
-        check state@(GameState r a s l d d2)
-            | elem (head s) . tail $ s = DeadState r a s
-            | head s == a = newapple $ GameState r a s (l+2) d d2
-            | otherwise = state
+        draw = uiRun uid $ drawState state
+handleEvent evt uid state@(RunState rnd sd@(snake, snakelen, dir, dirlog) apple) = do
+    case evt of
+        SDL.Quit -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_ESCAPE _ _)) -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_SPACE _ _)) -> do
+            return $ Right $ PauseState state
+        (SDL.KeyDown (SDL.Keysym k _ _)) -> do
+            -- Key pressed (though not escape or space)
+            let state' = if isdirkey k
+                         then RunState rnd (addDirLog sd . dirfromkey $ k) apple
+                         else state
+            return $ Right state'
+        (SDL.User SDL.UID0 0 _ _) -> do
+            -- Frame timer event. We're running the game,
+            -- so that means updating the game state.
+            let state' = step state
+            uiRun uid $ drawState state'
+            return $ Right state'
+        SDL.VideoExpose -> do
+            draw
+            return $ Right state
+        _ -> return $ Right state
+    where
+        draw = uiRun uid $ drawState state
+handleEvent evt uid state@(PauseState gstate) = do
+    case evt of
+        SDL.Quit -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_ESCAPE _ _)) -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_SPACE _ _)) -> do
+            -- Continue playing by returning the saved game state.
+            return . Right $ gstate
+        (SDL.User SDL.UID0 0 _ _) -> do
+            draw
+            return $ Right state
+        SDL.VideoExpose -> do
+            draw
+            return $ Right state
+        _ -> return $ Right state
+    where
+        draw = uiRun uid $ drawState state
+handleEvent evt uid state@(DeadState gstate@(RunState rnd _ _)) = do
+    case evt of
+        SDL.Quit -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_ESCAPE _ _)) -> do
+            return $ Left "Bye!"
+        (SDL.KeyDown (SDL.Keysym SDL.SDLK_SPACE _ _)) -> do
+            -- Start a new game, like in InitState.
+            return . Right $ startNew rnd
+        (SDL.User SDL.UID0 0 _ _) -> do
+            draw
+            return $ Right state
+        SDL.VideoExpose -> do
+            draw
+            return $ Right state
+        _ -> return $ Right state
+    where
+        draw = uiRun uid $ drawState state
 
 

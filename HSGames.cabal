@@ -9,9 +9,10 @@ data-dir: ""
  
 executable HSGames
     build-depends: QuickCheck -any, SDL -any, SDL-ttf -any, base -any,
-                   random -any, stm -any
+                   mtl -any, netwire -any, random -any, stm -any
     main-is: Main.hs
     buildable: True
     hs-source-dirs: src
-    other-modules: HSGames.HSGame HSGames.Snake.Direction HSGames.Snake
+    other-modules: HSGames.Snake.Types HSGames.Snake.Logic
+                   HSGames.Monad HSGames.Ticker HSGames.Snake HSGames.Snake.Direction
  
