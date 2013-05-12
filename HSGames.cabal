@@ -5,12 +5,9 @@ build-type: Simple
 license: AllRightsReserved
 license-file: ""
 synopsis: Games in Haskell
-data-dir: "data"
-extra-source-files:
-    README.md
-    Lacuna-Info.doc
-data-files:
-    lacuna.ttf
+data-files: lacuna.ttf
+data-dir: data
+extra-source-files: README.md Lacuna-Info.doc
  
 executable HSGames
     build-depends: QuickCheck -any, SDL -any, SDL-ttf -any, base -any,
@@ -18,6 +15,7 @@ executable HSGames
     main-is: Main.hs
     buildable: True
     hs-source-dirs: src
-    other-modules: HSGames.Snake.Types HSGames.Snake.Logic
-                   HSGames.Monad HSGames.Ticker HSGames.Snake HSGames.Snake.Direction
+    other-modules: HSGames.Breakout HSGames.Snake.Types
+                   HSGames.Snake.Logic HSGames.Monad HSGames.Ticker HSGames.Snake
+                   HSGames.Snake.Direction
  

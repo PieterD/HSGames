@@ -2,6 +2,7 @@ module HSGames.Snake (
     main
 ) where
 
+import Data.Either(Either(..))
 import Data.Maybe(Maybe)
 import Control.Monad(forever, when)
 import Control.Concurrent(forkIO, threadDelay, killThread)
